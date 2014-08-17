@@ -39,12 +39,12 @@ best <- function(state, outcome) {
     results <- outcomes[ rows, c(cols["hospital"], cols[outcome]) ]
 
     ## Rename column names to something short and easy
-    colnames(results) <- c("hospital", "outcome")
+    colnames(results) <- c("hospital", outcome)
     ## Convert outcome column to numeric
-    results$outcome <- as.numeric(results$outcome)
+    results[ ,outcome] <- as.numeric(results[ , outcome])
 
     ## Build a character vector of the name(s) of the hospitals with the lowest outcomes
-    best <- results$hospital[ results$outcome == min(results$outcome) ]
+    best <- results$hospital[ results[ , outcome] == min(results[ , outcome]) ]
 
     ## Return the first sorted result
     sort(best)[1]

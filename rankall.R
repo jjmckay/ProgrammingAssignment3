@@ -1,11 +1,4 @@
-rankall <- function(outcome, num = "best") {
-    ## Read outcome data
-    ## Check that state and outcome are valid
-    ## For each state, find the hospital of the given rank
-    ## Return a data frame with the hospital names and the
-    ## (abbreviated) state name
-    source('C:/Users/dba/repos/ProgrammingAssignment3/rankhospital.R')
-
+rankall2 <- function(outcome, num = "best") {
     ## Read outcome data
     outcomes <- read.csv("outcome-of-care-measures.csv", colClasses = "character")
 
@@ -23,9 +16,9 @@ rankall <- function(outcome, num = "best") {
     )
 
     ## Check that outcome and num are valid
-    valid.outcomes <- names(cols[3:length(cols)])
+    validOutcomes <- names(cols[3:length(cols)])
 
-    if ( !(outcome %in% valid.outcomes) ) {
+    if ( !(outcome %in% validOutcomes) ) {
         #print("Please enter one of the following outcomes available in the dataset.")
         #print(valid.outcomes)
         stop("invalid outcome")
@@ -35,41 +28,59 @@ rankall <- function(outcome, num = "best") {
         stop("invalid rank")
     }
 
-    getRow <- function(state) {
-        ## Return hospital name in that state with the given rank 30-day death rate
-        ## Build a logical vector of valid rows
-        rows <- outcomes[cols["state"]] == state & outcomes[,cols[outcome]] != "Not Available"
-        ## Build a simplified data frame with the specified criteria and valid values
-        results <- outcomes[ rows, c(cols["hospital"], cols["state"], cols[outcome]) ]
+    ## Get the list of states present in the dataset in order
+    states <- levels(factor(outcomes[ , cols["state"]]))
 
-        ## Rename column names to something short and easy
-        colnames(results) <- c("hospital", "state", outcome)
-        ## Convert outcome column to numeric
-        results[ ,outcome] <- as.numeric(results[ , outcome])
+    ## Build a logical vector that drops any outcome listed as "Not Available"
+    rowsPopulated <- outcomes[ ,cols[outcome]] != "Not Available"
 
-        ## Reorder by outcome (then hospital name) and replace dataset
-        results <- data.frame( results[order(results[ ,outcome], results$hospital), ] , row.names = 1:nrow(results) )
+    ## Pare down the dataset to just the columns we need: hospital, state, outcome
+    outcomesPared <- data.frame(outcomes[rowsPopulated ,c(cols["hospital"],
+                                                          cols["state"],
+                                                          cols[outcome])])
+    ## Rename columns to simpler names for easy referral
+    colnames(outcomesPared) <- c("hospital", "state", outcome)
 
-        ## Let's name the best and worst numerics in our vector instead of using
-        ## a conditional testing for the character strings! This way we can just
-        ## specify the row we want using the ranks vector. e.g. ranks[num]
-        ranks <- c( best = as.numeric(rownames(results[1, ])),
-                    seq(from = as.numeric(rownames(results[2, ])), to = nrow(results) - 1),
-                    worst = as.numeric(rownames(results[nrow(results), ])))
+    ## Convert state column to a type of factor
+    outcomesPared$state <- factor(outcomesPared$state)
 
-        ## Finally return the results!
-        results[ranks[num], c("hospital", "state")]
+    outcomesPared[ , outcome] <- as.numeric(outcomesPared[ , outcome])
+
+    ## Reorder the rows first by state then by outcome then by hospital name
+    outcomesPared <- outcomesPared[order(outcomesPared[ , "state"],
+                                         outcomesPared[ , outcome],
+                                         outcomesPared[ , "hospital"]), ]
+
+    ## Reindex the rows in sequential order
+    rownames(outcomesPared) <- 1:nrow(outcomesPared)
+
+    ## Adds a column of state ranks for hospitals
+    outcomesPared$state.rank <- sequence(tabulate(outcomesPared$state))
+
+    #### A function to retrieve and return the rank num specifies of each state
+    getRankedRow <- function(stateFrame, num = num) {
+        state <- as.character(stateFrame[stateFrame$state.rank == 1, "state"])
+
+        if (num == "best") {
+            returnRow <- stateFrame[ stateFrame$state.rank == 1, ]
+        } else if (num == "worst") {
+            returnRow <- stateFrame[ stateFrame$state.rank == nrow(stateFrame), ]
+        } else if (1 <= num && num < nrow(stateFrame)) {
+            returnRow <- stateFrame[ stateFrame$state.rank == num, ]
+        } else {
+            returnRow <- data.frame(rbind(c(hospital = "<NA>", state = state)))
+        }
+
+        rownames(returnRow) <- state
+        returnRow <- returnRow[ , c("hospital", "state")]
+
+        returnRow
     }
 
-    states <- levels(factor(outcomes$State))
+    outcomesList <- split(outcomesPared, outcomesPared$state)
 
-    ranked <- data.frame()
+    results <- lapply(outcomesList, getRankedRow, num = num)
+    results <-  do.call("rbind", results)
 
-    for (s in states) {
-        rbind( ranked, getRow(s) )
-    }
-
-    rownames(ranked) <- states
-
-    ranked
+    results
 }
